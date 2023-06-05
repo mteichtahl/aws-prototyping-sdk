@@ -31,40 +31,17 @@ export interface NotificationServiceProps {
 }
 
 /**
- * Creates infrastructure (SQS, DDB, WebSocket API, etc.) for notifications
+ * Creates a Notification with associated support infrastructure (SQS, DDB, WebSocket API, etc.)
  *
  * @export
  * @class Notifications
  * @extends {Construct}
  * @example
- * new Notifications(this, 'Notifications', {
- *   cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID!,
- *   cognitoWebClientId: process.env.COGNITO_WEB_CLIENT_ID!
- * });
+ * new Notifications(this, 'Notifications', props);
  */
 export class Notifications extends Construct {
-  /**
-   * DynamoDb table for storing web socket connections.
-   *
-   * @type {Table}
-   * @memberof Notifications
-   */
   public webSocketsConnectionsTable: Table;
-  /**
-   * DynamoDb table for storing notifications.
-   *
-   * @type {Table}
-   * @memberof Notifications
-   */
   public webSocketsNotificationsTable: Table;
-  /**
-   * Websocket API for notifications.
-   *
-   * @type {WebSocketApi}
-   * @memberof Notifications
-   * @resource AWS::ApiGatewayV2::Api
-   * @see https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html
-   */
   public webSocketApi: WebSocketApi;
 
   /**
@@ -79,16 +56,13 @@ export class Notifications extends Construct {
 
     const { cognitoUserPoolId, cognitoWebClientId } = props;
 
-    // create the ddb tables required
     const { webSocketsConnectionsTable, webSocketsNotificationsTable } =
       ddb(this);
     this.webSocketsConnectionsTable = webSocketsConnectionsTable;
     this.webSocketsNotificationsTable = webSocketsNotificationsTable;
 
-    // create the SQS queue required
     const notifcationQueue = sqs(this);
 
-    // build the default lambda handler props
     const nodeJsFunctionProps = functionProps({
       connectionTableName: this.webSocketsConnectionsTable.tableName,
       notificationsTableName: this.webSocketsNotificationsTable.tableName,
@@ -119,7 +93,7 @@ export class Notifications extends Construct {
       }
     );
 
-    // create lambda handler - call when a client connects
+    // connect handler
     const onConnectHandler = new NodejsFunction(this, "OnConnectHandler", {
       entry: join(__dirname, "/../src/handlers/onConnect/index.ts"),
       ...nodeJsFunctionProps,
@@ -132,7 +106,7 @@ export class Notifications extends Construct {
     this.webSocketsNotificationsTable.grantReadData(onConnectHandler);
     notifcationQueue.queue.grantSendMessages(onConnectHandler);
 
-    // create lambda handler - call when a client disconnects
+    // disconnect handler
     const onDisconnectHandler = new NodejsFunction(
       this,
       "OnDisconnectHandler",
@@ -143,7 +117,7 @@ export class Notifications extends Construct {
     );
     this.webSocketsConnectionsTable.grantReadWriteData(onDisconnectHandler);
 
-    // create lambda handler - called when a message from the client is recieved
+    // message handler
     const onMessageHandler = new NodejsFunction(this, "OnMessageHandler", {
       entry: join(__dirname, "/../src/lib/handlers/onMessage/index.ts"),
       ...nodeJsFunctionProps,
@@ -151,7 +125,7 @@ export class Notifications extends Construct {
     this.webSocketsConnectionsTable.grantReadData(onMessageHandler);
     this.webSocketsNotificationsTable.grantReadWriteData(onMessageHandler);
 
-    // create lambda handler - called when a new notification is recieved
+    // notification handler
     const onNotificationHandler = new NodejsFunction(
       this,
       "OnNotificationHandler",
@@ -164,7 +138,7 @@ export class Notifications extends Construct {
     this.webSocketsConnectionsTable.grantReadData(onNotificationHandler);
     this.webSocketsNotificationsTable.grantReadWriteData(onNotificationHandler);
 
-    // create lambda handler - called when sqs has a notification
+    // notification processor queue handler
     const processNotificationQueueHandler = new NodejsFunction(
       this,
       "ProcessNotificationQueueHandler",
@@ -194,7 +168,7 @@ export class Notifications extends Construct {
       })
     );
 
-    // create the web socket api
+    // websocket api
     this.webSocketApi = new WebSocketApi(this, "WebsocketApi", {
       description: "Websocket API",
       connectRouteOptions: {
@@ -218,7 +192,6 @@ export class Notifications extends Construct {
       },
     });
 
-    // create a stage for the web socket api
     const stage = new WebSocketStage(this, "Prod", {
       webSocketApi: this.webSocketApi,
       stageName: "wss",
