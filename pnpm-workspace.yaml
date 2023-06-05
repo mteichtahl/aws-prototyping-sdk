@@ -7,7 +7,6 @@ packages:
   - samples/cloudscape-react-ts-website
   - packages/cloudscape-react-ts-website
   - packages/identity
-  - packages/notifications
   - packages/nx-monorepo
   - packages/open-api-gateway
   - packages/pdk-nag
